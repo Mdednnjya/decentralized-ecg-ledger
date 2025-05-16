@@ -1,0 +1,5 @@
+flask==2.0.1
+ipfshttpclient==0.7.0
+fabric-sdk-py==1.0.0
+aiohttp==3.8.1
+requests==2.26.0
