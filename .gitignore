@@ -1,0 +1,40 @@
+# Hyperledger Fabric generated artifacts
+network/crypto-config/
+network/channel-artifacts/
+network/*.tar.gz
+network/*.block
+network/*.tx
+
+# Node.js
+node_modules/
+chaincode/ecg_chaincode/node_modules/
+chaincode/ecg_chaincode/package-lock.json
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# IPFS
+.ipfs/

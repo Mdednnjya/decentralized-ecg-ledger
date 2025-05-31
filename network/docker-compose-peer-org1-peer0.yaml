@@ -1,8 +1,5 @@
 version: '2'
 
-networks:
-  ecg_network:
-
 services:
   peer0.org1.example.com:
     container_name: peer0.org1.example.com
@@ -10,7 +7,7 @@ services:
     environment:
       - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
       - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=ecg_network
-      - CORE_LOGGING_LEVEL=INFO
+      - FABRIC_LOGGING_SPEC=INFO
       - CORE_PEER_TLS_ENABLED=true
       - CORE_PEER_PROFILE_ENABLED=true
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
@@ -24,16 +21,28 @@ services:
       - CORE_PEER_GOSSIP_BOOTSTRAP=peer1.org1.example.com:8051
       - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.example.com:7051
       - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_CHAINCODE_KEEPALIVE=10
+      - CORE_PEER_FILESYSTEMPATH=/var/hyperledger/production
     volumes:
       - /var/run/docker.sock:/host/var/run/docker.sock
       - ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp:/etc/hyperledger/fabric/msp
       - ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls:/etc/hyperledger/fabric/tls
+      - peer0_org1_data:/var/hyperledger/production
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     command: peer node start
     ports:
       - 7051:7051
       - 7052:7052
       - 7053:7053
+    restart: unless-stopped
     networks:
       ecg_network:
         ipv4_address: 10.34.1.1
+
+volumes:
+  peer0_org1_data:
+
+networks:
+  ecg_network:
+    external: true
