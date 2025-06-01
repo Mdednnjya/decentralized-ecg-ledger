@@ -16,13 +16,21 @@ export FABRIC_CFG_PATH=${PWD}
 export CORE_PEER_TLS_ENABLED=true
 export CHANNEL_NAME=ecgchannel
 
-echo "Testing connectivity to all peers..."
-for ip in $VM2_IP $VM3_IP $VM4_IP $VM5_IP; do
-    if nc -z $ip 7051 2>/dev/null || nc -z $ip 8051 2>/dev/null || nc -z $ip 9051 2>/dev/null || nc -z $ip 10051 2>/dev/null; then
-        echo "✓ Peer at $ip is reachable"
+echo "Testing connectivity to orderer and peers..."
+# Test orderer
+if nc -z $VM1_IP 7050 2>/dev/null; then
+    echo "✓ Orderer at $VM1_IP:7050 is reachable"
+else
+    echo "✗ Orderer at $VM1_IP:7050 is not reachable"
+    exit 1
+fi
+
+# Test peers
+for vm_ip in $VM2_IP:7051 $VM3_IP:8051 $VM4_IP:9051 $VM5_IP:10051; do
+    if nc -z ${vm_ip%:*} ${vm_ip#*:} 2>/dev/null; then
+        echo "✓ Peer at $vm_ip is reachable"
     else
-        echo "✗ Peer at $ip is not reachable on expected ports"
-        echo "Please ensure peer is running on VM $ip"
+        echo "✗ Peer at $vm_ip is not reachable"
     fi
 done
 

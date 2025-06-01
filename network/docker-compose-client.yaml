@@ -10,7 +10,13 @@ services:
       - ipfs_staging:/export
       - ipfs_data:/data/ipfs
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8080:8080"
+    networks:
+      ecg_network:
+        ipv4_address: 172.20.1.6
 
   client:
     container_name: client.example.com
@@ -26,8 +32,16 @@ services:
     depends_on:
       - ipfs
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "3000:3000"
+    networks:
+      ecg_network:
+        ipv4_address: 172.20.1.7
 
 volumes:
   ipfs_staging:
   ipfs_data:
+
+networks:
+  ecg_network:
+    external: true
