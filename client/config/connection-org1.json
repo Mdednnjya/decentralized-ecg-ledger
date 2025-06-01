@@ -69,7 +69,7 @@
   },
   "orderers": {
     "orderer.example.com": {
-      "url": "grpcs://10.34.1.10:7050",
+      "url": "grpcs://10.34.100.121:7050",
       "grpcOptions": {
         "ssl-target-name-override": "orderer.example.com",
         "hostnameOverride": "orderer.example.com"
@@ -81,7 +81,7 @@
   },
   "peers": {
     "peer0.org1.example.com": {
-      "url": "grpcs://10.34.1.1:7051",
+      "url": "grpcs://10.34.100.126:7051",
       "grpcOptions": {
         "ssl-target-name-override": "peer0.org1.example.com",
         "hostnameOverride": "peer0.org1.example.com"
@@ -91,7 +91,7 @@
       }
     },
     "peer1.org1.example.com": {
-      "url": "grpcs://10.34.1.2:8051",
+      "url": "grpcs://10.34.100.128:8051",
       "grpcOptions": {
         "ssl-target-name-override": "peer1.org1.example.com",
         "hostnameOverride": "peer1.org1.example.com"
@@ -101,7 +101,7 @@
       }
     },
     "peer0.org2.example.com": {
-      "url": "grpcs://10.34.1.3:9051",
+      "url": "grpcs://10.34.100.114:9051",
       "grpcOptions": {
         "ssl-target-name-override": "peer0.org2.example.com",
         "hostnameOverride": "peer0.org2.example.com"
@@ -111,7 +111,7 @@
       }
     },
     "peer1.org2.example.com": {
-      "url": "grpcs://10.34.1.4:10051",
+      "url": "grpcs://10.34.100.116:10051",
       "grpcOptions": {
         "ssl-target-name-override": "peer1.org2.example.com",
         "hostnameOverride": "peer1.org2.example.com"
@@ -123,7 +123,7 @@
   },
   "certificateAuthorities": {
     "ca.org1.example.com": {
-      "url": "https://10.34.1.6:7054",
+      "url": "https://10.34.100.121:8054",
       "caName": "ca-org1",
       "tlsCACerts": {
         "path": "../crypto-config/peerOrganizations/org1.example.com/ca/ca.org1.example.com-cert.pem"
@@ -133,7 +133,7 @@
       }
     },
     "ca.org2.example.com": {
-      "url": "https://10.34.1.7:7054",
+      "url": "https://10.34.100.121:9054",
       "caName": "ca-org2",
       "tlsCACerts": {
         "path": "../crypto-config/peerOrganizations/org2.example.com/ca/ca.org2.example.com-cert.pem"
