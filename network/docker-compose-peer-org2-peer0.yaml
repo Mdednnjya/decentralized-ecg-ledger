@@ -29,9 +29,5 @@ services:
       - ./crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls:/etc/hyperledger/fabric/tls
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     command: peer node start
-    ports:
-      - 9051:9051
-      - 9052:9052
-      - 9053:9053
     restart: unless-stopped
     network_mode: host
