@@ -61,32 +61,50 @@ done
 echo "Connectivity test passed."
 
 echo ""
-echo "Step 4: Distribute crypto-config to all VMs..."
+echo "Step 4: Clean old artifacts and distribute crypto-config to all VMs..."
+
+# Function to clean and copy artifacts
+distribute_to_vm() {
+    local vm_ip=$1
+    local vm_user=$2
+    local vm_desc=$3
+    
+    echo "Distributing to VM: $vm_ip ($vm_desc)"
+    
+    # Remove old artifacts on remote VM first
+    echo "  - Removing old crypto-config and channel-artifacts on $vm_ip..."
+    ssh ${vm_user}@${vm_ip} "cd ~/decentralized-ecg-ledger/network && rm -rf crypto-config/ channel-artifacts/" || echo "  Warning: Failed to remove old artifacts on $vm_ip"
+    
+    # Copy new artifacts with force overwrite
+    echo "  - Copying new crypto-config to $vm_ip..."
+    scp -r ./crypto-config ${vm_user}@${vm_ip}:~/decentralized-ecg-ledger/network/ || echo "  Failed to copy crypto-config to $vm_ip"
+    
+    echo "  - Copying new channel-artifacts to $vm_ip..."
+    scp -r ./channel-artifacts ${vm_user}@${vm_ip}:~/decentralized-ecg-ledger/network/ || echo "  Failed to copy channel-artifacts to $vm_ip"
+    
+    echo "  ✓ Distribution to $vm_ip completed"
+}
 
 # VM2 (kel5)
-echo "Copying to VM: $VM2_IP (User: $USER_VM2)"
-scp -r ./crypto-config ${USER_VM2}@${VM2_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy crypto-config to $VM2_IP"
-scp -r ./channel-artifacts ${USER_VM2}@${VM2_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy channel-artifacts to $VM2_IP"
+distribute_to_vm "$VM2_IP" "$USER_VM2" "User: $USER_VM2"
 
 # VM3 (kel6)
-echo "Copying to VM: $VM3_IP (User: $USER_VM3)"
-scp -r ./crypto-config ${USER_VM3}@${VM3_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy crypto-config to $VM3_IP"
-scp -r ./channel-artifacts ${USER_VM3}@${VM3_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy channel-artifacts to $VM3_IP"
+distribute_to_vm "$VM3_IP" "$USER_VM3" "User: $USER_VM3"
 
 # VM4 (kel1)
-echo "Copying to VM: $VM4_IP (User: $USER_VM4)"
-scp -r ./crypto-config ${USER_VM4}@${VM4_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy crypto-config to $VM4_IP"
-scp -r ./channel-artifacts ${USER_VM4}@${VM4_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy channel-artifacts to $VM4_IP"
+distribute_to_vm "$VM4_IP" "$USER_VM4" "User: $USER_VM4"
 
 # VM5 (kel2)
-echo "Copying to VM: $VM5_IP (User: $USER_VM5)"
-scp -r ./crypto-config ${USER_VM5}@${VM5_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy crypto-config to $VM5_IP"
-scp -r ./channel-artifacts ${USER_VM5}@${VM5_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy channel-artifacts to $VM5_IP"
+distribute_to_vm "$VM5_IP" "$USER_VM5" "User: $USER_VM5"
 
 # VM6 (kel4)
-echo "Copying to VM: $VM6_IP (User: $USER_VM6)"
-scp -r ./crypto-config ${USER_VM6}@${VM6_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy crypto-config to $VM6_IP"
-scp -r ./channel-artifacts ${USER_VM6}@${VM6_IP}:~/decentralized-ecg-ledger/network/ || echo "Failed to copy channel-artifacts to $VM6_IP"
+distribute_to_vm "$VM6_IP" "$USER_VM6" "User: $USER_VM6"
 
 echo ""
 echo "✓ Setup completed!"
+echo ""
+echo "Next steps:"
+echo "1. Start services on VM1: docker-compose -f docker-compose-ca-orderer.yaml up -d"
+echo "2. Start peer services on VM2-5"  
+echo "3. Start client on VM6"
+echo "4. Create channel from VM1: ./scripts/create-channel.sh"
