@@ -3,17 +3,36 @@ OrdererOrgs:
     Domain: example.com
     Specs:
       - Hostname: orderer
+        CommonName: orderer.example.com
+        SANS:
+          - "orderer.example.com"
+          - "10.34.100.121"
+          - "localhost"
+          - "127.0.0.1"
 
 PeerOrgs:
   - Name: Org1
     Domain: org1.example.com
     Template:
       Count: 2
+      SANS:
+        - "{{.Hostname}}.{{.Domain}}"
+        - "10.34.100.126"   # peer0.org1
+        - "10.34.100.128"   # peer1.org1  
+        - "localhost"
+        - "127.0.0.1"
     Users:
       Count: 1
+      
   - Name: Org2
     Domain: org2.example.com
     Template:
       Count: 2
+      SANS:
+        - "{{.Hostname}}.{{.Domain}}"
+        - "10.34.100.114"   # peer0.org2
+        - "10.34.100.116"   # peer1.org2
+        - "localhost" 
+        - "127.0.0.1"
     Users:
       Count: 1
