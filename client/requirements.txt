@@ -2,4 +2,6 @@ flask==2.3.3
 ipfshttpclient==0.8.0a2
 requests==2.31.0
 python-dotenv==1.0.0
-hfc==1.0.0
+grpcio==1.56.2
+grpcio-tools==1.56.2
+protobuf==4.23.4
