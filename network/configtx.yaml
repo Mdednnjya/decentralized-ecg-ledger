@@ -28,6 +28,9 @@ Organizations:
             Admins:
                 Type: Signature
                 Rule: "OR('Org1MSP.admin')"
+            Endorsement: # <--- TAMBAHKAN INI
+                Type: Signature
+                Rule: "OR('Org1MSP.peer')" # Atau 'Org2MSP.peer'
         AnchorPeers:
             - Host: peer0.org1.example.com
               Port: 7051
@@ -46,6 +49,9 @@ Organizations:
             Admins:
                 Type: Signature
                 Rule: "OR('Org2MSP.admin')"
+            Endorsement: # <--- TAMBAHKAN INI
+                Type: Signature
+                Rule: "OR('Org2MSP.peer')" # Atau 'Org2MSP.peer'      
         AnchorPeers:
             - Host: peer0.org2.example.com
               Port: 9051
@@ -69,10 +75,10 @@ Application: &ApplicationDefaults
             Rule: "ANY Writers"
         Admins:
             Type: ImplicitMeta
-            Rule: "MAJORITY Admins"
+            Rule: "ANY Admins"
         LifecycleEndorsement:
             Type: ImplicitMeta
-            Rule: "MAJORITY Endorsement"
+            Rule: "ANY Endorsement"
         Endorsement:
             Type: ImplicitMeta
             Rule: "MAJORITY Endorsement"
