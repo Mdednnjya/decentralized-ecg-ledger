@@ -1,9 +1,10 @@
 OrdererOrgs:
   - Name: Orderer
     Domain: example.com
+    EnableNodeOUs: true # Tambahkan ini, praktik yang baik
     Specs:
       - Hostname: orderer
-        CommonName: orderer.example.com
+        # CommonName: orderer.example.com # CommonName biasanya tidak perlu jika SANS lengkap
         SANS:
           - "orderer.example.com"
           - "10.34.100.121"
@@ -13,26 +14,38 @@ OrdererOrgs:
 PeerOrgs:
   - Name: Org1
     Domain: org1.example.com
-    Template:
-      Count: 2
-      SANS:
-        - "{{.Hostname}}.{{.Domain}}"
-        - "10.34.100.126"   # peer0.org1
-        - "10.34.100.128"   # peer1.org1  
-        - "localhost"
-        - "127.0.0.1"
+    EnableNodeOUs: true # Tambahkan ini
+    # Template: # Hapus atau komentari Template jika menggunakan Specs
+    #   Count: 2
+    Specs: # Definisikan setiap peer secara eksplisit untuk SANS yang unik
+      - Hostname: peer0
+        SANS:
+          - "localhost"
+          - "peer0.org1.example.com"
+          - "10.34.100.126"         # IP khusus untuk peer0.org1
+      - Hostname: peer1
+        SANS:
+          - "localhost"
+          - "peer1.org1.example.com"
+          - "10.34.100.128"         # IP khusus untuk peer1.org1
     Users:
-      Count: 1
-      
+      Count: 1 # Jumlah pengguna untuk Org1
+
   - Name: Org2
     Domain: org2.example.com
-    Template:
-      Count: 2
-      SANS:
-        - "{{.Hostname}}.{{.Domain}}"
-        - "10.34.100.114"   # peer0.org2
-        - "10.34.100.116"   # peer1.org2
-        - "localhost" 
-        - "127.0.0.1"
+    EnableNodeOUs: true # Tambahkan ini
+    # Template: # Hapus atau komentari Template jika menggunakan Specs
+    #   Count: 2
+    Specs: # Definisikan setiap peer secara eksplisit untuk SANS yang unik
+      - Hostname: peer0
+        SANS:
+          - "localhost"
+          - "peer0.org2.example.com"
+          - "10.34.100.114"         # IP khusus untuk peer0.org2
+      - Hostname: peer1
+        SANS:
+          - "localhost"
+          - "peer1.org2.example.com"
+          - "10.34.100.116"         # IP khusus untuk peer1.org2
     Users:
-      Count: 1
+      Count: 1 # Jumlah pengguna untuk Org2
