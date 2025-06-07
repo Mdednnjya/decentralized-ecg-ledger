@@ -15,7 +15,7 @@ class ECGContract extends Contract {
     }
 
     async storeECGData(ctx, patientIDString, ipfsHash, timestamp, metadata, patientOwnerClientID) {
-        console.info('========= Store ECG Data =========');
+        console.info('========= Store ECG Data with Escrow Pattern =========');
 
         // Doctor yang input data
         const inputByClientID = this.getClientIdentityString(ctx);
@@ -31,16 +31,19 @@ class ECGContract extends Contract {
             ipfsHash,
             timestamp,
             metadata: parsedMetadata,
+            status: "PENDING_VERIFICATION",      // 🔒 Escrow: Start with PENDING
             accessControl: {
                 owner: patientOwnerClientID,      // Patient sebagai owner
                 authorizedUsers: []              // Awalnya kosong
             },
             accessHistory: [],
-            inputBy: inputByClientID             // Doctor yang input data
+            inputBy: inputByClientID,             // Doctor yang input data
+            createdAt: new Date().toISOString(),
+            lastStatusUpdate: new Date().toISOString()
         };
 
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
-        console.info(`ECG data stored for patient ${patientIDString} with owner ${patientOwnerClientID}, input by ${inputByClientID}`);
+        console.info(`ECG data stored with PENDING status for patient ${patientIDString} with owner ${patientOwnerClientID}, input by ${inputByClientID}`);
         
         // 🚨 EMIT EVENT untuk notification system
         const eventPayload = {
@@ -48,24 +51,92 @@ class ECGContract extends Contract {
             patientID: patientIDString,
             ipfsHash: ipfsHash,
             timestamp: timestamp,
+            status: "PENDING_VERIFICATION",
             hospital: parsedMetadata.hospital || 'Unknown Hospital',
             doctor: parsedMetadata.doctor || 'Unknown Doctor',
             device: parsedMetadata.device || 'Unknown Device',
             inputBy: inputByClientID,
             owner: patientOwnerClientID,
-            notificationMessage: `New ECG data uploaded for patient ${patientIDString} by ${parsedMetadata.doctor || 'Doctor'} at ${parsedMetadata.hospital || 'Hospital'}`
+            notificationMessage: `New ECG data uploaded for patient ${patientIDString} - Awaiting verification`
         };
 
         ctx.stub.setEvent('ECGDataStored', Buffer.from(JSON.stringify(eventPayload)));
         console.info(`Event emitted: ECGDataStored for patient ${patientIDString}`);
+
+        // 🔄 EMIT EVENT untuk IPFS verification
+        const verificationPayload = {
+            eventType: 'VERIFY_IPFS_DATA',
+            patientID: patientIDString,
+            ipfsHash: ipfsHash,
+            timestamp: timestamp,
+            requestedBy: inputByClientID,
+            verificationTimeout: 300 // 5 minutes timeout
+        };
+
+        ctx.stub.setEvent('VerifyIPFSData', Buffer.from(JSON.stringify(verificationPayload)));
+        console.info(`Event emitted: VerifyIPFSData for patient ${patientIDString}`);
         
         return JSON.stringify({ 
             status: 'success', 
-            message: 'ECG data stored successfully', 
+            message: 'ECG data stored successfully with PENDING verification status', 
             patientID: patientIDString, 
             owner: patientOwnerClientID,
             inputBy: inputByClientID,
+            verificationStatus: "PENDING_VERIFICATION",
             eventEmitted: true
+        });
+    }
+
+    async confirmECGData(ctx, patientIDString, isValid, verificationDetails) {
+        console.info('========= Confirm ECG Data Verification =========');
+
+        const ecgDataBuffer = await ctx.stub.getState(patientIDString);
+        if (!ecgDataBuffer || ecgDataBuffer.length === 0) {
+            throw new Error(`Patient data for ${patientIDString} not found`);
+        }
+
+        const ecgData = JSON.parse(ecgDataBuffer.toString());
+        const verifierClientID = this.getClientIdentityString(ctx);
+
+        // Only allow verification if status is PENDING
+        if (ecgData.status !== "PENDING_VERIFICATION") {
+            throw new Error(`ECG data for patient ${patientIDString} is not in PENDING_VERIFICATION status. Current status: ${ecgData.status}`);
+        }
+
+        // Update status based on verification result
+        const newStatus = (isValid === 'true' || isValid === true) ? "CONFIRMED" : "FAILED";
+        ecgData.status = newStatus;
+        ecgData.lastStatusUpdate = new Date().toISOString();
+        ecgData.verificationDetails = {
+            verifiedBy: verifierClientID,
+            verifiedAt: new Date().toISOString(),
+            isValid: newStatus === "CONFIRMED",
+            details: verificationDetails || "Automated verification"
+        };
+
+        await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
+        console.info(`ECG data for patient ${patientIDString} verification completed. Status: ${newStatus}`);
+
+        // 🚨 EMIT EVENT untuk verification result
+        const eventPayload = {
+            eventType: 'ECG_VERIFICATION_COMPLETED',
+            patientID: patientIDString,
+            verificationResult: newStatus,
+            verifiedBy: verifierClientID,
+            timestamp: new Date().toISOString(),
+            ipfsHash: ecgData.ipfsHash,
+            notificationMessage: `ECG data verification ${newStatus.toLowerCase()} for patient ${patientIDString}`
+        };
+
+        ctx.stub.setEvent('ECGVerificationCompleted', Buffer.from(JSON.stringify(eventPayload)));
+        console.info(`Event emitted: ECGVerificationCompleted for patient ${patientIDString} with result ${newStatus}`);
+
+        return JSON.stringify({
+            status: 'success',
+            message: `ECG data verification completed for patient ${patientIDString}`,
+            verificationResult: newStatus,
+            verifiedBy: verifierClientID,
+            verifiedAt: ecgData.verificationDetails.verifiedAt
         });
     }
 
@@ -79,6 +150,11 @@ class ECGContract extends Contract {
 
         const ecgData = JSON.parse(ecgDataBuffer.toString());
         const callerClientID = this.getClientIdentityString(ctx);
+
+        // Check if data is verified before allowing access grants
+        if (ecgData.status !== "CONFIRMED") {
+            throw new Error(`Cannot grant access to unverified ECG data. Current status: ${ecgData.status}. Data must be CONFIRMED first.`);
+        }
 
         // Hanya owner (patient) yang bisa memberikan akses
         if (callerClientID !== ecgData.accessControl.owner) {
@@ -102,7 +178,8 @@ class ECGContract extends Contract {
                 grantedTo: doctorClientIDToGrant,
                 grantedBy: callerClientID,
                 timestamp: new Date().toISOString(),
-                notificationMessage: `Access granted to doctor for patient ${patientIDString} data`
+                dataStatus: ecgData.status,
+                notificationMessage: `Access granted to doctor for verified patient ${patientIDString} data`
             };
 
             ctx.stub.setEvent('AccessGranted', Buffer.from(JSON.stringify(eventPayload)));
@@ -114,7 +191,8 @@ class ECGContract extends Contract {
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
         return JSON.stringify({ 
             status: 'success', 
-            message: `Access granted to ${doctorClientIDToGrant} for patient ${patientIDString}` 
+            message: `Access granted to ${doctorClientIDToGrant} for patient ${patientIDString}`,
+            dataStatus: ecgData.status
         });
     }
 
@@ -153,6 +231,7 @@ class ECGContract extends Contract {
                 revokedFrom: doctorClientIDToRevoke,
                 revokedBy: callerClientID,
                 timestamp: new Date().toISOString(),
+                dataStatus: ecgData.status,
                 notificationMessage: `Access revoked from doctor for patient ${patientIDString} data`
             };
 
@@ -165,7 +244,8 @@ class ECGContract extends Contract {
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
         return JSON.stringify({ 
             status: 'success', 
-            message: `Access revoked for ${doctorClientIDToRevoke} from patient ${patientIDString}` 
+            message: `Access revoked for ${doctorClientIDToRevoke} from patient ${patientIDString}`,
+            dataStatus: ecgData.status
         });
     }
 
@@ -180,6 +260,11 @@ class ECGContract extends Contract {
         const ecgData = JSON.parse(ecgDataBuffer.toString());
         const accessorClientID = this.getClientIdentityString(ctx);
 
+        // 🔒 ESCROW CHECK: Only allow access to CONFIRMED data
+        if (ecgData.status !== "CONFIRMED") {
+            throw new Error(`ECG data for patient ${patientIDString} is not yet confirmed. Current status: ${ecgData.status}. Access denied until verification is complete.`);
+        }
+
         // Periksa apakah pemanggil adalah owner (patient) ATAU ada di daftar authorizedUsers
         if (accessorClientID !== ecgData.accessControl.owner && !ecgData.accessControl.authorizedUsers.includes(accessorClientID)) {
             console.error(`Unauthorized access attempt: Accessor ${accessorClientID} is not owner and not in authorized list for patient ${patientIDString}`);
@@ -189,10 +274,11 @@ class ECGContract extends Contract {
         const accessRecord = {
             accessorID: accessorClientID,
             timestamp: new Date().toISOString(),
-            action: 'access_data'
+            action: 'access_data',
+            dataStatus: ecgData.status
         };
         ecgData.accessHistory.push(accessRecord);
-        console.info(`Access recorded for ${accessorClientID} to patient ${patientIDString}`);
+        console.info(`Access recorded for ${accessorClientID} to patient ${patientIDString} (status: ${ecgData.status})`);
 
         // 🚨 EMIT EVENT untuk data access notification
         const eventPayload = {
@@ -200,7 +286,8 @@ class ECGContract extends Contract {
             patientID: patientIDString,
             accessedBy: accessorClientID,
             timestamp: accessRecord.timestamp,
-            notificationMessage: `ECG data for patient ${patientIDString} was accessed by ${accessorClientID}`
+            dataStatus: ecgData.status,
+            notificationMessage: `Verified ECG data for patient ${patientIDString} was accessed by ${accessorClientID}`
         };
 
         ctx.stub.setEvent('ECGDataAccessed', Buffer.from(JSON.stringify(eventPayload)));
@@ -214,11 +301,39 @@ class ECGContract extends Contract {
             ipfsHash: ecgData.ipfsHash,
             timestamp: ecgData.timestamp,
             metadata: ecgData.metadata,
+            status: ecgData.status,
+            verificationDetails: ecgData.verificationDetails,
             accessGranted: true, 
             accessorInfo: { 
                 id: accessorClientID, 
                 accessTime: accessRecord.timestamp 
             }
+        });
+    }
+
+    async getECGDataStatus(ctx, patientIDString) {
+        console.info('========= Get ECG Data Status =========');
+
+        const ecgDataBuffer = await ctx.stub.getState(patientIDString);
+        if (!ecgDataBuffer || ecgDataBuffer.length === 0) {
+            throw new Error(`Patient data for ${patientIDString} not found`);
+        }
+
+        const ecgData = JSON.parse(ecgDataBuffer.toString());
+        const callerClientID = this.getClientIdentityString(ctx);
+
+        // Allow status check by owner or authorized users
+        if (callerClientID !== ecgData.accessControl.owner && !ecgData.accessControl.authorizedUsers.includes(callerClientID)) {
+            throw new Error(`Access denied. Only the patient owner or authorized doctors can check data status.`);
+        }
+
+        return JSON.stringify({
+            patientID: ecgData.patientID,
+            status: ecgData.status,
+            createdAt: ecgData.createdAt,
+            lastStatusUpdate: ecgData.lastStatusUpdate,
+            verificationDetails: ecgData.verificationDetails || null,
+            accessibleForDataAccess: ecgData.status === "CONFIRMED"
         });
     }
 
@@ -242,10 +357,14 @@ class ECGContract extends Contract {
         console.info(`Audit trail accessed by owner ${accessorClientID} for patient ${patientIDString}`);
         return JSON.stringify({
             patientID: patientIDString,
+            currentStatus: ecgData.status,
             auditTrail: ecgData.accessHistory,
             currentAuthorizedUsers: ecgData.accessControl.authorizedUsers,
             dataInputBy: ecgData.inputBy,
-            owner: ecgData.accessControl.owner
+            owner: ecgData.accessControl.owner,
+            verificationDetails: ecgData.verificationDetails,
+            createdAt: ecgData.createdAt,
+            lastStatusUpdate: ecgData.lastStatusUpdate
         });
     }
 
