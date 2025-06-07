@@ -25,11 +25,12 @@ class ECGContract extends Contract {
             throw new Error('Patient owner client ID is required');
         }
 
+        const parsedMetadata = JSON.parse(metadata || '{}');
         const ecgData = {
             patientID: patientIDString,
             ipfsHash,
             timestamp,
-            metadata: JSON.parse(metadata || '{}'),
+            metadata: parsedMetadata,
             accessControl: {
                 owner: patientOwnerClientID,      // Patient sebagai owner
                 authorizedUsers: []              // Awalnya kosong
@@ -41,12 +42,30 @@ class ECGContract extends Contract {
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
         console.info(`ECG data stored for patient ${patientIDString} with owner ${patientOwnerClientID}, input by ${inputByClientID}`);
         
+        // 🚨 EMIT EVENT untuk notification system
+        const eventPayload = {
+            eventType: 'ECG_DATA_STORED',
+            patientID: patientIDString,
+            ipfsHash: ipfsHash,
+            timestamp: timestamp,
+            hospital: parsedMetadata.hospital || 'Unknown Hospital',
+            doctor: parsedMetadata.doctor || 'Unknown Doctor',
+            device: parsedMetadata.device || 'Unknown Device',
+            inputBy: inputByClientID,
+            owner: patientOwnerClientID,
+            notificationMessage: `New ECG data uploaded for patient ${patientIDString} by ${parsedMetadata.doctor || 'Doctor'} at ${parsedMetadata.hospital || 'Hospital'}`
+        };
+
+        ctx.stub.setEvent('ECGDataStored', Buffer.from(JSON.stringify(eventPayload)));
+        console.info(`Event emitted: ECGDataStored for patient ${patientIDString}`);
+        
         return JSON.stringify({ 
             status: 'success', 
             message: 'ECG data stored successfully', 
             patientID: patientIDString, 
             owner: patientOwnerClientID,
-            inputBy: inputByClientID
+            inputBy: inputByClientID,
+            eventEmitted: true
         });
     }
 
@@ -75,6 +94,19 @@ class ECGContract extends Contract {
         if (!ecgData.accessControl.authorizedUsers.includes(doctorClientIDToGrant)) {
             ecgData.accessControl.authorizedUsers.push(doctorClientIDToGrant);
             console.info(`Access granted to ${doctorClientIDToGrant} for patient ${patientIDString} by owner ${callerClientID}`);
+
+            // 🚨 EMIT EVENT untuk access granted notification
+            const eventPayload = {
+                eventType: 'ACCESS_GRANTED',
+                patientID: patientIDString,
+                grantedTo: doctorClientIDToGrant,
+                grantedBy: callerClientID,
+                timestamp: new Date().toISOString(),
+                notificationMessage: `Access granted to doctor for patient ${patientIDString} data`
+            };
+
+            ctx.stub.setEvent('AccessGranted', Buffer.from(JSON.stringify(eventPayload)));
+            console.info(`Event emitted: AccessGranted for patient ${patientIDString} to ${doctorClientIDToGrant}`);
         } else {
             console.info(`${doctorClientIDToGrant} already has access to patient ${patientIDString}`);
         }
@@ -113,6 +145,19 @@ class ECGContract extends Contract {
 
         if (ecgData.accessControl.authorizedUsers.length < initialLength) {
             console.info(`Access revoked for ${doctorClientIDToRevoke} from patient ${patientIDString} by owner ${callerClientID}`);
+
+            // 🚨 EMIT EVENT untuk access revoked notification
+            const eventPayload = {
+                eventType: 'ACCESS_REVOKED',
+                patientID: patientIDString,
+                revokedFrom: doctorClientIDToRevoke,
+                revokedBy: callerClientID,
+                timestamp: new Date().toISOString(),
+                notificationMessage: `Access revoked from doctor for patient ${patientIDString} data`
+            };
+
+            ctx.stub.setEvent('AccessRevoked', Buffer.from(JSON.stringify(eventPayload)));
+            console.info(`Event emitted: AccessRevoked for patient ${patientIDString} from ${doctorClientIDToRevoke}`);
         } else {
             console.info(`${doctorClientIDToRevoke} was not found in authorized users for patient ${patientIDString}. No access revoked.`);
         }
@@ -148,6 +193,18 @@ class ECGContract extends Contract {
         };
         ecgData.accessHistory.push(accessRecord);
         console.info(`Access recorded for ${accessorClientID} to patient ${patientIDString}`);
+
+        // 🚨 EMIT EVENT untuk data access notification
+        const eventPayload = {
+            eventType: 'ECG_DATA_ACCESSED',
+            patientID: patientIDString,
+            accessedBy: accessorClientID,
+            timestamp: accessRecord.timestamp,
+            notificationMessage: `ECG data for patient ${patientIDString} was accessed by ${accessorClientID}`
+        };
+
+        ctx.stub.setEvent('ECGDataAccessed', Buffer.from(JSON.stringify(eventPayload)));
+        console.info(`Event emitted: ECGDataAccessed for patient ${patientIDString} by ${accessorClientID}`);
 
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
 
