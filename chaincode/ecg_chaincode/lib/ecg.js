@@ -14,30 +14,43 @@ class ECGContract extends Contract {
         return;
     }
 
-    async storeECGData(ctx, patientIDString, ipfsHash, timestamp, metadata) {
+    async storeECGData(ctx, patientIDString, ipfsHash, timestamp, metadata, patientOwnerClientID) {
         console.info('========= Store ECG Data =========');
 
-        // Pemanggil fungsi ini dianggap sebagai pemilik data (pasien)
-        const ownerClientID = this.getClientIdentityString(ctx);
+        // Doctor yang input data
+        const inputByClientID = this.getClientIdentityString(ctx);
+
+        // Patient yang menjadi owner data
+        if (!patientOwnerClientID || patientOwnerClientID.trim() === '') {
+            throw new Error('Patient owner client ID is required');
+        }
 
         const ecgData = {
-            patientID: patientIDString, // ID pasien yang bisa dibaca manusia
+            patientID: patientIDString,
             ipfsHash,
             timestamp,
             metadata: JSON.parse(metadata || '{}'),
             accessControl: {
-                owner: ownerClientID,       // Simpan ID Kriptografi Pemilik
-                authorizedUsers: []       // Awalnya kosong, pemilik otomatis bisa akses
+                owner: patientOwnerClientID,      // Patient sebagai owner
+                authorizedUsers: []              // Awalnya kosong
             },
-            accessHistory: []
+            accessHistory: [],
+            inputBy: inputByClientID             // Doctor yang input data
         };
 
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
-        console.info(`ECG data stored for patient ${patientIDString} with owner ${ownerClientID}`);
-        return JSON.stringify({ status: 'success', message: 'ECG data stored successfully', patientID: patientIDString, owner: ownerClientID });
+        console.info(`ECG data stored for patient ${patientIDString} with owner ${patientOwnerClientID}, input by ${inputByClientID}`);
+        
+        return JSON.stringify({ 
+            status: 'success', 
+            message: 'ECG data stored successfully', 
+            patientID: patientIDString, 
+            owner: patientOwnerClientID,
+            inputBy: inputByClientID
+        });
     }
 
-    async grantAccess(ctx, patientIDString, doctorClientIDToGrant) { // doctorClientIDToGrant harus ID X.509 lengkap
+    async grantAccess(ctx, patientIDString, doctorClientIDToGrant) {
         console.info('========= Grant Access =========');
 
         const ecgDataBuffer = await ctx.stub.getState(patientIDString);
@@ -48,13 +61,13 @@ class ECGContract extends Contract {
         const ecgData = JSON.parse(ecgDataBuffer.toString());
         const callerClientID = this.getClientIdentityString(ctx);
 
-        // Hanya pemilik data yang bisa memberikan akses
+        // Hanya owner (patient) yang bisa memberikan akses
         if (callerClientID !== ecgData.accessControl.owner) {
             console.error(`Unauthorized grant attempt: Caller ${callerClientID} is not owner ${ecgData.accessControl.owner} of patient ${patientIDString}`);
-            throw new Error(`Caller (${callerClientID}) is not the owner of patient data ${patientIDString}. Only the owner (${ecgData.accessControl.owner}) can grant access.`);
+            throw new Error(`Only the patient owner (${ecgData.accessControl.owner}) can grant access to their data. Current caller: ${callerClientID}`);
         }
 
-        // Pastikan doctorClientIDToGrant adalah string X.509 yang valid (minimal tidak kosong)
+        // Validasi doctor client ID format
         if (!doctorClientIDToGrant || typeof doctorClientIDToGrant !== 'string' || !doctorClientIDToGrant.startsWith('x509::')) {
             throw new Error('Invalid doctorClientIDToGrant format. Expected full X.509 client ID string.');
         }
@@ -67,10 +80,13 @@ class ECGContract extends Contract {
         }
 
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
-        return JSON.stringify({ status: 'success', message: `Access granted to ${doctorClientIDToGrant} for patient ${patientIDString}` });
+        return JSON.stringify({ 
+            status: 'success', 
+            message: `Access granted to ${doctorClientIDToGrant} for patient ${patientIDString}` 
+        });
     }
 
-    async revokeAccess(ctx, patientIDString, doctorClientIDToRevoke) { // doctorClientIDToRevoke harus ID X.509 lengkap
+    async revokeAccess(ctx, patientIDString, doctorClientIDToRevoke) {
         console.info('========= Revoke Access =========');
 
         const ecgDataBuffer = await ctx.stub.getState(patientIDString);
@@ -81,13 +97,13 @@ class ECGContract extends Contract {
         const ecgData = JSON.parse(ecgDataBuffer.toString());
         const callerClientID = this.getClientIdentityString(ctx);
 
-        // Hanya pemilik data yang bisa mencabut akses
+        // Hanya owner (patient) yang bisa mencabut akses
         if (callerClientID !== ecgData.accessControl.owner) {
             console.error(`Unauthorized revoke attempt: Caller ${callerClientID} is not owner ${ecgData.accessControl.owner} of patient ${patientIDString}`);
-            throw new Error(`Caller (${callerClientID}) is not the owner of patient data ${patientIDString}. Only the owner (${ecgData.accessControl.owner}) can revoke access.`);
+            throw new Error(`Only the patient owner (${ecgData.accessControl.owner}) can revoke access to their data. Current caller: ${callerClientID}`);
         }
 
-        // Pastikan doctorClientIDToRevoke adalah string X.509 yang valid
+        // Validasi doctor client ID format
         if (!doctorClientIDToRevoke || typeof doctorClientIDToRevoke !== 'string' || !doctorClientIDToRevoke.startsWith('x509::')) {
             throw new Error('Invalid doctorClientIDToRevoke format. Expected full X.509 client ID string.');
         }
@@ -102,7 +118,10 @@ class ECGContract extends Contract {
         }
         
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
-        return JSON.stringify({ status: 'success', message: `Access revoked for ${doctorClientIDToRevoke} from patient ${patientIDString}` });
+        return JSON.stringify({ 
+            status: 'success', 
+            message: `Access revoked for ${doctorClientIDToRevoke} from patient ${patientIDString}` 
+        });
     }
 
     async accessECGData(ctx, patientIDString) {
@@ -116,30 +135,33 @@ class ECGContract extends Contract {
         const ecgData = JSON.parse(ecgDataBuffer.toString());
         const accessorClientID = this.getClientIdentityString(ctx);
 
-        // Periksa apakah pemanggil adalah pemilik ATAU ada di daftar authorizedUsers
+        // Periksa apakah pemanggil adalah owner (patient) ATAU ada di daftar authorizedUsers
         if (accessorClientID !== ecgData.accessControl.owner && !ecgData.accessControl.authorizedUsers.includes(accessorClientID)) {
             console.error(`Unauthorized access attempt: Accessor ${accessorClientID} is not owner and not in authorized list for patient ${patientIDString}`);
-            throw new Error(`Accessor (${accessorClientID}) is not authorized to access patient data ${patientIDString}. Owner: ${ecgData.accessControl.owner}, Authorized: ${ecgData.accessControl.authorizedUsers.join(', ')}`);
+            throw new Error(`Access denied. Only the patient owner or authorized doctors can access this data. Owner: ${ecgData.accessControl.owner}`);
         }
 
         const accessRecord = {
             accessorID: accessorClientID,
-            timestamp: new Date().toISOString() // Gunakan timestamp server, bukan dari klien
+            timestamp: new Date().toISOString(),
+            action: 'access_data'
         };
         ecgData.accessHistory.push(accessRecord);
         console.info(`Access recorded for ${accessorClientID} to patient ${patientIDString}`);
 
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
 
-        // Hanya kembalikan data yang relevan, bukan seluruh objek ecgData termasuk accessControl
+        // Return data yang relevan (tidak termasuk access control details untuk security)
         return JSON.stringify({
             patientID: ecgData.patientID,
             ipfsHash: ecgData.ipfsHash,
             timestamp: ecgData.timestamp,
             metadata: ecgData.metadata,
-            // Untuk konfirmasi di klien, kita bisa tambahkan ini, tapi mungkin tidak untuk data sensitif
             accessGranted: true, 
-            accessorInfo: { id: accessorClientID, accessTime: accessRecord.timestamp }
+            accessorInfo: { 
+                id: accessorClientID, 
+                accessTime: accessRecord.timestamp 
+            }
         });
     }
 
@@ -154,20 +176,27 @@ class ECGContract extends Contract {
         const ecgData = JSON.parse(ecgDataBuffer.toString());
         const accessorClientID = this.getClientIdentityString(ctx);
 
-        // Hanya pemilik yang bisa melihat audit trail lengkap
+        // Hanya owner (patient) yang bisa melihat audit trail lengkap
         if (accessorClientID !== ecgData.accessControl.owner) {
             console.error(`Unauthorized audit trail access attempt: Accessor ${accessorClientID} is not owner ${ecgData.accessControl.owner} for patient ${patientIDString}`);
-            throw new Error('Only the owner can view the audit trail');
+            throw new Error(`Only the patient owner can view the complete audit trail. Owner: ${ecgData.accessControl.owner}`);
         }
+        
         console.info(`Audit trail accessed by owner ${accessorClientID} for patient ${patientIDString}`);
-        return JSON.stringify(ecgData.accessHistory);
+        return JSON.stringify({
+            patientID: patientIDString,
+            auditTrail: ecgData.accessHistory,
+            currentAuthorizedUsers: ecgData.accessControl.authorizedUsers,
+            dataInputBy: ecgData.inputBy,
+            owner: ecgData.accessControl.owner
+        });
     }
 
-    // Di dalam class ECGContract Anda:
+    // Helper function untuk debugging identity
     async getMyIdentity(ctx) {
-    	const clientID = ctx.clientIdentity.getID();
-    	console.info(`Client ID requesting is: ${clientID}`);
-    	return clientID;
+        const clientID = ctx.clientIdentity.getID();
+        console.info(`Client ID requesting is: ${clientID}`);
+        return clientID;
     }
 }
 
