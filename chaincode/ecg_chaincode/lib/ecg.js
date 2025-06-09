@@ -26,10 +26,14 @@ class ECGContract extends Contract {
         }
 
         const parsedMetadata = JSON.parse(metadata || '{}');
+        
+        // 🔧 FIX: Use deterministic timestamp from parameter
+        const deterministicTimestamp = timestamp || new Date().toISOString();
+        
         const ecgData = {
             patientID: patientIDString,
             ipfsHash,
-            timestamp,
+            timestamp: deterministicTimestamp,
             metadata: parsedMetadata,
             status: "PENDING_VERIFICATION",      // 🔒 Escrow: Start with PENDING
             accessControl: {
@@ -38,8 +42,8 @@ class ECGContract extends Contract {
             },
             accessHistory: [],
             inputBy: inputByClientID,             // Doctor yang input data
-            createdAt: new Date().toISOString(),
-            lastStatusUpdate: new Date().toISOString()
+            createdAt: deterministicTimestamp,   // 🔧 FIX: Use deterministic timestamp
+            lastStatusUpdate: deterministicTimestamp  // 🔧 FIX: Use deterministic timestamp
         };
 
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
@@ -50,7 +54,7 @@ class ECGContract extends Contract {
             eventType: 'ECG_DATA_STORED',
             patientID: patientIDString,
             ipfsHash: ipfsHash,
-            timestamp: timestamp,
+            timestamp: deterministicTimestamp,
             status: "PENDING_VERIFICATION",
             hospital: parsedMetadata.hospital || 'Unknown Hospital',
             doctor: parsedMetadata.doctor || 'Unknown Doctor',
@@ -68,7 +72,7 @@ class ECGContract extends Contract {
             eventType: 'VERIFY_IPFS_DATA',
             patientID: patientIDString,
             ipfsHash: ipfsHash,
-            timestamp: timestamp,
+            timestamp: deterministicTimestamp,
             requestedBy: inputByClientID,
             verificationTimeout: 300 // 5 minutes timeout
         };
@@ -103,13 +107,17 @@ class ECGContract extends Contract {
             throw new Error(`ECG data for patient ${patientIDString} is not in PENDING_VERIFICATION status. Current status: ${ecgData.status}`);
         }
 
+        // 🔧 FIX: Use transaction timestamp for deterministic behavior
+        const txTimestamp = ctx.stub.getTxTimestamp();
+        const deterministicTimestamp = new Date(txTimestamp.seconds * 1000 + Math.round(txTimestamp.nanos / 1000000)).toISOString();
+
         // Update status based on verification result
         const newStatus = (isValid === 'true' || isValid === true) ? "CONFIRMED" : "FAILED";
         ecgData.status = newStatus;
-        ecgData.lastStatusUpdate = new Date().toISOString();
+        ecgData.lastStatusUpdate = deterministicTimestamp;  // 🔧 FIX: Use transaction timestamp
         ecgData.verificationDetails = {
             verifiedBy: verifierClientID,
-            verifiedAt: new Date().toISOString(),
+            verifiedAt: deterministicTimestamp,  // 🔧 FIX: Use transaction timestamp
             isValid: newStatus === "CONFIRMED",
             details: verificationDetails || "Automated verification"
         };
@@ -123,7 +131,7 @@ class ECGContract extends Contract {
             patientID: patientIDString,
             verificationResult: newStatus,
             verifiedBy: verifierClientID,
-            timestamp: new Date().toISOString(),
+            timestamp: deterministicTimestamp,
             ipfsHash: ecgData.ipfsHash,
             notificationMessage: `ECG data verification ${newStatus.toLowerCase()} for patient ${patientIDString}`
         };
@@ -162,37 +170,43 @@ class ECGContract extends Contract {
             throw new Error(`Only the patient owner (${ecgData.accessControl.owner}) can grant access to their data. Current caller: ${callerClientID}`);
         }
 
-        // Validasi doctor client ID format
-        if (!doctorClientIDToGrant || typeof doctorClientIDToGrant !== 'string' || !doctorClientIDToGrant.startsWith('x509::')) {
-            throw new Error('Invalid doctorClientIDToGrant format. Expected full X.509 client ID string.');
+        // Check if doctor already has access
+        if (ecgData.accessControl.authorizedUsers.includes(doctorClientIDToGrant)) {
+            throw new Error(`Doctor ${doctorClientIDToGrant} already has access to patient ${patientIDString} data`);
         }
+
+        // Grant access
+        ecgData.accessControl.authorizedUsers.push(doctorClientIDToGrant);
         
-        if (!ecgData.accessControl.authorizedUsers.includes(doctorClientIDToGrant)) {
-            ecgData.accessControl.authorizedUsers.push(doctorClientIDToGrant);
-            console.info(`Access granted to ${doctorClientIDToGrant} for patient ${patientIDString} by owner ${callerClientID}`);
-
-            // 🚨 EMIT EVENT untuk access granted notification
-            const eventPayload = {
-                eventType: 'ACCESS_GRANTED',
-                patientID: patientIDString,
-                grantedTo: doctorClientIDToGrant,
-                grantedBy: callerClientID,
-                timestamp: new Date().toISOString(),
-                dataStatus: ecgData.status,
-                notificationMessage: `Access granted to doctor for verified patient ${patientIDString} data`
-            };
-
-            ctx.stub.setEvent('AccessGranted', Buffer.from(JSON.stringify(eventPayload)));
-            console.info(`Event emitted: AccessGranted for patient ${patientIDString} to ${doctorClientIDToGrant}`);
-        } else {
-            console.info(`${doctorClientIDToGrant} already has access to patient ${patientIDString}`);
-        }
+        // 🔧 FIX: Use transaction timestamp for deterministic behavior
+        const txTimestamp = ctx.stub.getTxTimestamp();
+        const deterministicTimestamp = new Date(txTimestamp.seconds * 1000 + Math.round(txTimestamp.nanos / 1000000)).toISOString();
+        
+        ecgData.lastStatusUpdate = deterministicTimestamp;  // 🔧 FIX: Use transaction timestamp
 
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
-        return JSON.stringify({ 
-            status: 'success', 
-            message: `Access granted to ${doctorClientIDToGrant} for patient ${patientIDString}`,
-            dataStatus: ecgData.status
+        console.info(`Access granted to doctor ${doctorClientIDToGrant} for patient ${patientIDString} by owner ${callerClientID}`);
+
+        // 🚨 EMIT EVENT untuk access grant notification
+        const eventPayload = {
+            eventType: 'ACCESS_GRANTED',
+            patientID: patientIDString,
+            grantedTo: doctorClientIDToGrant,
+            grantedBy: callerClientID,
+            timestamp: deterministicTimestamp,
+            ipfsHash: ecgData.ipfsHash,
+            notificationMessage: `Access granted to ${doctorClientIDToGrant} for patient ${patientIDString}`
+        };
+
+        ctx.stub.setEvent('AccessGranted', Buffer.from(JSON.stringify(eventPayload)));
+        console.info(`Event emitted: AccessGranted for doctor ${doctorClientIDToGrant} to patient ${patientIDString}`);
+
+        return JSON.stringify({
+            status: 'success',
+            message: `Access granted to doctor ${doctorClientIDToGrant} for patient ${patientIDString}`,
+            grantedBy: callerClientID,
+            grantedTo: doctorClientIDToGrant,
+            currentAuthorizedUsers: ecgData.accessControl.authorizedUsers
         });
     }
 
@@ -213,39 +227,44 @@ class ECGContract extends Contract {
             throw new Error(`Only the patient owner (${ecgData.accessControl.owner}) can revoke access to their data. Current caller: ${callerClientID}`);
         }
 
-        // Validasi doctor client ID format
-        if (!doctorClientIDToRevoke || typeof doctorClientIDToRevoke !== 'string' || !doctorClientIDToRevoke.startsWith('x509::')) {
-            throw new Error('Invalid doctorClientIDToRevoke format. Expected full X.509 client ID string.');
+        // Check if doctor has access
+        const doctorIndex = ecgData.accessControl.authorizedUsers.indexOf(doctorClientIDToRevoke);
+        if (doctorIndex === -1) {
+            throw new Error(`Doctor ${doctorClientIDToRevoke} does not have access to patient ${patientIDString} data`);
         }
 
-        const initialLength = ecgData.accessControl.authorizedUsers.length;
-        ecgData.accessControl.authorizedUsers = ecgData.accessControl.authorizedUsers.filter(userClientID => userClientID !== doctorClientIDToRevoke);
-
-        if (ecgData.accessControl.authorizedUsers.length < initialLength) {
-            console.info(`Access revoked for ${doctorClientIDToRevoke} from patient ${patientIDString} by owner ${callerClientID}`);
-
-            // 🚨 EMIT EVENT untuk access revoked notification
-            const eventPayload = {
-                eventType: 'ACCESS_REVOKED',
-                patientID: patientIDString,
-                revokedFrom: doctorClientIDToRevoke,
-                revokedBy: callerClientID,
-                timestamp: new Date().toISOString(),
-                dataStatus: ecgData.status,
-                notificationMessage: `Access revoked from doctor for patient ${patientIDString} data`
-            };
-
-            ctx.stub.setEvent('AccessRevoked', Buffer.from(JSON.stringify(eventPayload)));
-            console.info(`Event emitted: AccessRevoked for patient ${patientIDString} from ${doctorClientIDToRevoke}`);
-        } else {
-            console.info(`${doctorClientIDToRevoke} was not found in authorized users for patient ${patientIDString}. No access revoked.`);
-        }
+        // Revoke access
+        ecgData.accessControl.authorizedUsers.splice(doctorIndex, 1);
         
+        // 🔧 FIX: Use transaction timestamp for deterministic behavior
+        const txTimestamp = ctx.stub.getTxTimestamp();
+        const deterministicTimestamp = new Date(txTimestamp.seconds * 1000 + Math.round(txTimestamp.nanos / 1000000)).toISOString();
+        
+        ecgData.lastStatusUpdate = deterministicTimestamp;  // 🔧 FIX: Use transaction timestamp
+
         await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
-        return JSON.stringify({ 
-            status: 'success', 
-            message: `Access revoked for ${doctorClientIDToRevoke} from patient ${patientIDString}`,
-            dataStatus: ecgData.status
+        console.info(`Access revoked from doctor ${doctorClientIDToRevoke} for patient ${patientIDString} by owner ${callerClientID}`);
+
+        // 🚨 EMIT EVENT untuk access revoke notification
+        const eventPayload = {
+            eventType: 'ACCESS_REVOKED',
+            patientID: patientIDString,
+            revokedFrom: doctorClientIDToRevoke,
+            revokedBy: callerClientID,
+            timestamp: deterministicTimestamp,
+            ipfsHash: ecgData.ipfsHash,
+            notificationMessage: `Access revoked from ${doctorClientIDToRevoke} for patient ${patientIDString}`
+        };
+
+        ctx.stub.setEvent('AccessRevoked', Buffer.from(JSON.stringify(eventPayload)));
+        console.info(`Event emitted: AccessRevoked for doctor ${doctorClientIDToRevoke} from patient ${patientIDString}`);
+
+        return JSON.stringify({
+            status: 'success',
+            message: `Access revoked from doctor ${doctorClientIDToRevoke} for patient ${patientIDString}`,
+            revokedBy: callerClientID,
+            revokedFrom: doctorClientIDToRevoke,
+            currentAuthorizedUsers: ecgData.accessControl.authorizedUsers
         });
     }
 
@@ -260,59 +279,68 @@ class ECGContract extends Contract {
         const ecgData = JSON.parse(ecgDataBuffer.toString());
         const accessorClientID = this.getClientIdentityString(ctx);
 
-        // 🔒 ESCROW CHECK: Only allow access to CONFIRMED data
+        // Check if data is confirmed/verified before allowing access
         if (ecgData.status !== "CONFIRMED") {
-            throw new Error(`ECG data for patient ${patientIDString} is not yet confirmed. Current status: ${ecgData.status}. Access denied until verification is complete.`);
+            throw new Error(`ECG data for patient ${patientIDString} is not verified. Current status: ${ecgData.status}. Only CONFIRMED data can be accessed.`);
         }
 
-        // Periksa apakah pemanggil adalah owner (patient) ATAU ada di daftar authorizedUsers
-        if (accessorClientID !== ecgData.accessControl.owner && !ecgData.accessControl.authorizedUsers.includes(accessorClientID)) {
-            console.error(`Unauthorized access attempt: Accessor ${accessorClientID} is not owner and not in authorized list for patient ${patientIDString}`);
-            throw new Error(`Access denied. Only the patient owner or authorized doctors can access this data. Owner: ${ecgData.accessControl.owner}`);
+        // Check access permissions
+        const isOwner = (accessorClientID === ecgData.accessControl.owner);
+        const isAuthorized = ecgData.accessControl.authorizedUsers.includes(accessorClientID);
+
+        if (!isOwner && !isAuthorized) {
+            console.error(`Unauthorized access attempt: Accessor ${accessorClientID} is not authorized for patient ${patientIDString}`);
+            console.error(`Owner: ${ecgData.accessControl.owner}`);
+            console.error(`Authorized users: ${JSON.stringify(ecgData.accessControl.authorizedUsers)}`);
+            throw new Error(`Access denied. Only the patient owner or authorized doctors can access this ECG data.`);
         }
 
+        // 🔧 FIX: Use transaction timestamp for deterministic behavior
+        const txTimestamp = ctx.stub.getTxTimestamp();
+        const deterministicTimestamp = new Date(txTimestamp.seconds * 1000 + Math.round(txTimestamp.nanos / 1000000)).toISOString();
+
+        // Log access in audit trail
         const accessRecord = {
             accessorID: accessorClientID,
-            timestamp: new Date().toISOString(),
-            action: 'access_data',
-            dataStatus: ecgData.status
+            accessTime: deterministicTimestamp,  // 🔧 FIX: Use transaction timestamp
+            accessType: isOwner ? 'OWNER_ACCESS' : 'AUTHORIZED_ACCESS',
+            ipfsHash: ecgData.ipfsHash
         };
-        ecgData.accessHistory.push(accessRecord);
-        console.info(`Access recorded for ${accessorClientID} to patient ${patientIDString} (status: ${ecgData.status})`);
 
-        // 🚨 EMIT EVENT untuk data access notification
+        ecgData.accessHistory.push(accessRecord);
+        ecgData.lastStatusUpdate = deterministicTimestamp;  // 🔧 FIX: Use transaction timestamp
+
+        await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
+        console.info(`ECG data accessed by ${accessorClientID} for patient ${patientIDString} (${accessRecord.accessType})`);
+
+        // 🚨 EMIT EVENT untuk access log
         const eventPayload = {
             eventType: 'ECG_DATA_ACCESSED',
             patientID: patientIDString,
             accessedBy: accessorClientID,
-            timestamp: accessRecord.timestamp,
-            dataStatus: ecgData.status,
-            notificationMessage: `Verified ECG data for patient ${patientIDString} was accessed by ${accessorClientID}`
+            accessType: accessRecord.accessType,
+            timestamp: deterministicTimestamp,
+            ipfsHash: ecgData.ipfsHash,
+            notificationMessage: `ECG data accessed by ${accessorClientID} for patient ${patientIDString}`
         };
 
         ctx.stub.setEvent('ECGDataAccessed', Buffer.from(JSON.stringify(eventPayload)));
-        console.info(`Event emitted: ECGDataAccessed for patient ${patientIDString} by ${accessorClientID}`);
+        console.info(`Event emitted: ECGDataAccessed by ${accessorClientID} for patient ${patientIDString}`);
 
-        await ctx.stub.putState(patientIDString, Buffer.from(JSON.stringify(ecgData)));
-
-        // Return data yang relevan (tidak termasuk access control details untuk security)
         return JSON.stringify({
             patientID: ecgData.patientID,
             ipfsHash: ecgData.ipfsHash,
             timestamp: ecgData.timestamp,
             metadata: ecgData.metadata,
             status: ecgData.status,
-            verificationDetails: ecgData.verificationDetails,
-            accessGranted: true, 
-            accessorInfo: { 
-                id: accessorClientID, 
-                accessTime: accessRecord.timestamp 
-            }
+            accessorType: accessRecord.accessType,
+            accessTime: accessRecord.accessTime,
+            verificationDetails: ecgData.verificationDetails
         });
     }
 
-    async getECGDataStatus(ctx, patientIDString) {
-        console.info('========= Get ECG Data Status =========');
+    async getDataStatus(ctx, patientIDString) {
+        console.info('========= Get Data Status =========');
 
         const ecgDataBuffer = await ctx.stub.getState(patientIDString);
         if (!ecgDataBuffer || ecgDataBuffer.length === 0) {
@@ -320,10 +348,13 @@ class ECGContract extends Contract {
         }
 
         const ecgData = JSON.parse(ecgDataBuffer.toString());
-        const callerClientID = this.getClientIdentityString(ctx);
+        const accessorClientID = this.getClientIdentityString(ctx);
 
-        // Allow status check by owner or authorized users
-        if (callerClientID !== ecgData.accessControl.owner && !ecgData.accessControl.authorizedUsers.includes(callerClientID)) {
+        // Only allow authorized parties to check status
+        const isOwner = (accessorClientID === ecgData.accessControl.owner);
+        const isAuthorized = ecgData.accessControl.authorizedUsers.includes(accessorClientID);
+        
+        if (!isOwner && !isAuthorized) {
             throw new Error(`Access denied. Only the patient owner or authorized doctors can check data status.`);
         }
 
