@@ -17,8 +17,8 @@ export CORE_PEER_TLS_ENABLED=true
 export CHANNEL_NAME=ecgchannel
 export CC_NAME=ecgcontract
 export CC_SRC_PATH=../chaincode/ecg_chaincode
-export CC_VERSION=1.4
-export CC_SEQUENCE=2
+export CC_VERSION=1.8
+export CC_SEQUENCE=6
 
 ORDERER_TLS_ROOTCERT_FILE_FOR_CLIENT="${PWD}/crypto-config/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem"
 
@@ -184,7 +184,6 @@ install_chaincode_on_peer() {
 }
 
 # Function to approve chaincode for organization
-# Function to approve chaincode for organization
 approve_chaincode_for_org() {
     local org_name=$1
     local msp_id=$2
@@ -203,40 +202,37 @@ approve_chaincode_for_org() {
     fi
     export CORE_PEER_ADDRESS=$peer_ip:$peer_port
 
-    # Logika untuk melewati approval jika sudah ada (bahkan dengan --clean) jika errornya adalah "redefine"
-    # Ini hanya workaround untuk kasus spesifik Anda sekarang.
-     if [[ $CLEAN_START == false ]]; then
-         log_info "Checking if $org_name already approved..."
-         if peer lifecycle chaincode checkcommitreadiness \
-             --channelID ${CHANNEL_NAME} \
-             --name ${CC_NAME} \
-             --version ${CC_VERSION} \
-             --sequence ${CC_SEQUENCE} \
-             --init-required \
-             --output json 2>/dev/null | grep -q "\"$msp_id\": true"; then
-             log_info "✓ $org_name already approved (from checkcommitreadiness), skipping..."
-             return 0
-         fi
-     fi
+    # 🔧 REMOVED: --init-required flag (not needed for newer versions)
+    if [[ $CLEAN_START == false ]]; then
+        log_info "Checking if $org_name already approved..."
+        if peer lifecycle chaincode checkcommitreadiness \
+            --channelID ${CHANNEL_NAME} \
+            --name ${CC_NAME} \
+            --version ${CC_VERSION} \
+            --sequence ${CC_SEQUENCE} \
+            --output json 2>/dev/null | grep -q "\"$msp_id\": true"; then
+            log_info "✓ $org_name already approved (from checkcommitreadiness), skipping..."
+            return 0
+        fi
+    fi
 
     log_info "Attempting to approve chaincode for $org_name..."
-    if output=$(peer lifecycle chaincode approveformyorg -o orderer.example.com:7050 \
+    if output=$(peer lifecycle chaincode approveformyorg -o $VM1_IP:7050 \
         --ordererTLSHostnameOverride orderer.example.com \
         --channelID ${CHANNEL_NAME} \
         --name ${CC_NAME} \
         --version ${CC_VERSION} \
         --package-id ${package_id} \
         --sequence ${CC_SEQUENCE} \
-        --init-required \
         --tls \
         --cafile ${PWD}/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem 2>&1); then
         log_info "✓ $org_name approved chaincode successfully."
         return 0
     else
-        # Periksa apakah errornya karena "redefine uncommitted sequence" dan CC_SEQUENCE adalah 1
+        # Check if error is about redefining sequence
         if [[ "$output" == *"attempted to redefine uncommitted sequence ("${CC_SEQUENCE}") for namespace ${CC_NAME} with unchanged content"* ]]; then
             log_warn "✓ $org_name ($msp_id) already has a pending approval for sequence ${CC_SEQUENCE} with identical content. Proceeding..."
-            return 0 # Anggap sukses jika errornya adalah ini
+            return 0
         else
             log_error "✗ Failed to approve chaincode for $org_name. Output:"
             echo "$output"
@@ -247,6 +243,7 @@ approve_chaincode_for_org() {
 
 # Main execution starts here
 log_info "Starting chaincode deployment..."
+log_info "🔧 DETERMINISTIC FIX: Version ${CC_VERSION}, Sequence ${CC_SEQUENCE}"
 
 if [[ $CLEAN_START == true ]]; then
     log_warn "Clean start mode: Will restart approval process from beginning"
@@ -260,20 +257,20 @@ test_peer_connectivity "peer1.org1" $VM3_IP 8051 || exit 1
 test_peer_connectivity "peer0.org2" $VM4_IP 9051 || exit 1
 test_peer_connectivity "peer1.org2" $VM5_IP 10051 || exit 1
 
-# Di awal skrip, setelah parsing argumen atau sebelum Step 2
-if [[ $FORCE_REINSTALL == true ]] || [[ APAKAH_ADA_PERUBAHAN_KODE_ATAU_VERSI == true ]]; then # Logika ini perlu Anda pikirkan implementasinya
+# Force repackaging if needed
+if [[ $FORCE_REINSTALL == true ]]; then
     log_info "Removing old chaincode package ${CC_NAME}.tar.gz to force repackaging..."
     rm -f ./${CC_NAME}.tar.gz
 fi
 
-# Kemudian Step 2 akan membuat ulang jika file tidak ada
+# Step 2: Package chaincode
 log_info "=== Step 2: Packaging Chaincode ==="
-if [[ ! -f "${CC_NAME}.tar.gz" ]]; then # Selalu package jika file tidak ada (karena baru dihapus)
+if [[ ! -f "${CC_NAME}.tar.gz" ]]; then
     log_info "Packaging chaincode ${CC_NAME} version ${CC_VERSION}..."
     peer lifecycle chaincode package ${CC_NAME}.tar.gz \
         --path ${CC_SRC_PATH} \
         --lang node \
-        --label ${CC_NAME}_${CC_VERSION} # Menggunakan CC_VERSION saat ini
+        --label ${CC_NAME}_${CC_VERSION}
     log_info "✓ Chaincode packaged"
 else
     log_info "✓ Chaincode package ${CC_NAME}.tar.gz already exists and not forcing repackage."
@@ -324,7 +321,6 @@ COMMIT_READINESS=$(peer lifecycle chaincode checkcommitreadiness \
     --name ${CC_NAME} \
     --version ${CC_VERSION} \
     --sequence ${CC_SEQUENCE} \
-    --init-required \
     --output json)
 
 echo "$COMMIT_READINESS"
@@ -341,9 +337,6 @@ fi
 log_info "=== Step 8: Committing Chaincode ==="
 
 NEEDS_COMMIT=true
-# Set konteks untuk querycommitted (misalnya ke peer0.org1)
-# (Variabel lingkungan untuk Org1 Admin seharusnya sudah terset dari CheckCommitReadiness)
-
 COMMITTED_CC_INFO_JSON=$(peer lifecycle chaincode querycommitted --channelID ${CHANNEL_NAME} --name ${CC_NAME} --output json 2>/dev/null)
 
 if [[ $? -eq 0 && -n "$COMMITTED_CC_INFO_JSON" ]] && echo "$COMMITTED_CC_INFO_JSON" | jq '.sequence' &> /dev/null; then
@@ -365,19 +358,13 @@ fi
 
 if [[ "$NEEDS_COMMIT" == true ]]; then
     log_info "Committing chaincode ${CC_NAME} version ${CC_VERSION} sequence ${CC_SEQUENCE}..."
-    # Pastikan konteks Admin Org1 masih aktif untuk menjalankan commit
-    export CORE_PEER_LOCALMSPID="Org1MSP"
-    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
-    export CORE_PEER_MSPCONFIGPATH=${PWD}/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
-    export CORE_PEER_ADDRESS=$VM2_IP:7051 # Peer yang digunakan untuk mengirim proposal commit
-
+    
     peer lifecycle chaincode commit -o $VM1_IP:7050 \
         --ordererTLSHostnameOverride orderer.example.com \
         --channelID ${CHANNEL_NAME} \
         --name ${CC_NAME} \
         --version ${CC_VERSION} \
         --sequence ${CC_SEQUENCE} \
-        --init-required \
         --tls \
         --cafile "${ORDERER_TLS_ROOTCERT_FILE_FOR_CLIENT}" \
         --peerAddresses $VM2_IP:7051 \
@@ -387,34 +374,28 @@ if [[ "$NEEDS_COMMIT" == true ]]; then
  
     if [[ $? -eq 0 ]]; then
         log_info "✓ Chaincode committed successfully."
-        # Jika commit sukses, maka Langkah 9 (Init) mungkin perlu dijalankan (tidak dikomentari)
     else
         log_error "✗ Failed to commit chaincode."
         exit 1
     fi
 fi
 
-# Step 9: Initialize chaincode
-log_info "=== Step 9: Initializing Chaincode ==="
-log_info "Initializing chaincode..."
-peer chaincode invoke -o orderer.example.com:7050 \
-    --ordererTLSHostnameOverride orderer.example.com \
-    --tls \
-    --cafile ${PWD}/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem \
-    -C ${CHANNEL_NAME} \
-    -n ${CC_NAME} \
-    --isInit \
-    -c '{"function":"initLedger","Args":[]}' \
-    --peerAddresses $VM2_IP:7051 \
-    --tlsRootCertFiles ${PWD}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
-    --peerAddresses $VM4_IP:9051 \
-    --tlsRootCertFiles ${PWD}/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+# 🔧 REMOVED: Step 9 (Initialize) - Not needed for newer chaincode versions
 
-log_info "✓ Chaincode initialized"
-
-# Step 10: Verify deployment
-log_info "=== Step 10: Verifying Deployment ==="
+# Step 9: Verify deployment
+log_info "=== Step 9: Verifying Deployment ==="
 peer lifecycle chaincode querycommitted --channelID ${CHANNEL_NAME}
 
-log_info "🎉 Chaincode deployment completed successfully!"
-log_info "Chaincode '$CC_NAME' version '$CC_VERSION' is now ready for use on channel '$CHANNEL_NAME'"
+log_info "🎉 DETERMINISTIC CHAINCODE DEPLOYMENT COMPLETED!"
+log_info "🔧 Fixed issues:"
+log_info "   - ❌ Non-deterministic timestamp generation"
+log_info "   - ✅ Using deterministic timestamp parameters"
+log_info "   - ✅ Using ctx.stub.getTxTimestamp() for updates"
+log_info "   - ✅ Removed --init-required flag"
+log_info ""
+log_info "Chaincode '$CC_NAME' version '$CC_VERSION' sequence '$CC_SEQUENCE' is ready!"
+log_info ""
+log_info "🧪 Test the fix with:"
+log_info "curl -X POST http://10.34.100.125:3000/ecg/upload \\"
+log_info '  -H "Content-Type: application/json" \'
+log_info '  -d '"'"'{"patientId":"MARIA002","patientOwnerClientID":"x509::CN=maria.patient","ecgData":{...}}'"'"
