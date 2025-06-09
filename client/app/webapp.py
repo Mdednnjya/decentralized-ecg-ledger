@@ -14,8 +14,8 @@ app = Flask(__name__)
 # Initialize IPFS client  
 ipfs_client = IPFSClient(ipfs_host='172.20.1.6', ipfs_port=5001)
 
-# Initialize REAL Fabric Gateway client (no more mock!)
-fabric_client = FabricGatewayClient(peer_endpoint="10.34.100.126:7051")
+# Initialize REAL Fabric Gateway client
+fabric_client = FabricGatewayClient(peer_address="10.34.100.126:7051")
 
 # Enhanced Alert System for Escrow Pattern
 class ECGAlertSystem:
@@ -200,6 +200,10 @@ if __name__ == '__main__':
     print("  - POST /ecg/upload") 
     print("  - GET  /ecg/access/<patient_id>")
     print("  - POST /ecg/grant-access")
+    print("  - POST /ecg/revoke-access")
+    print("  - GET  /ecg/audit/<patient_id>")
+    print("  - GET  /ecg/status/<patient_id>")
+    print("  - POST /ecg/confirm")
     print("  - GET  /ecg/logs")
     print("\n⛓️  Blockchain: REAL HYPERLEDGER FABRIC")
     print("🔒 Escrow Pattern: ENABLED")
@@ -207,3 +211,86 @@ if __name__ == '__main__':
     print("📝 Logs: /tmp/ecg_fabric_alerts.log")
     
     app.run(host='0.0.0.0', port=3000, debug=True)
+
+@app.route('/ecg/revoke-access', methods=['POST'])
+def revoke_access():
+    """Revoke access via REAL blockchain"""
+    try:
+        data = request.json
+        patient_id = data.get('patientId')
+        doctor_id = data.get('doctorClientID')
+        
+        if not patient_id or not doctor_id:
+            return jsonify({"error": "Missing patientId or doctorClientID"}), 400
+        
+        # Revoke via REAL Fabric Gateway
+        result = fabric_client.revoke_access(patient_id, doctor_id)
+        
+        return jsonify({
+            "status": "success",
+            "message": "Access revoked via REAL blockchain",
+            "blockchainResult": result,
+            "mockData": False
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/ecg/audit/<patient_id>', methods=['GET'])
+def get_audit_trail(patient_id):
+    """Get audit trail from REAL blockchain"""
+    try:
+        # Get audit via REAL Fabric Gateway
+        result = fabric_client.get_audit_trail(patient_id)
+        
+        return jsonify({
+            "status": "success",
+            "patientId": patient_id,
+            "auditTrail": result,
+            "mockData": False
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/ecg/status/<patient_id>', methods=['GET'])
+def get_ecg_status(patient_id):
+    """Get ECG data status from REAL blockchain"""
+    try:
+        # Get status via REAL Fabric Gateway
+        result = fabric_client.get_ecg_status(patient_id)
+        
+        return jsonify({
+            "status": "success",
+            "patientId": patient_id,
+            "ecgStatus": result,
+            "mockData": False
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/ecg/confirm', methods=['POST'])
+def confirm_ecg_verification():
+    """Confirm ECG data verification (for escrow pattern)"""
+    try:
+        data = request.json
+        patient_id = data.get('patientId')
+        is_valid = data.get('isValid', True)
+        verification_details = data.get('verificationDetails', 'Manual confirmation')
+        
+        if not patient_id:
+            return jsonify({"error": "Missing patientId"}), 400
+        
+        # Confirm via REAL Fabric Gateway
+        result = fabric_client.confirm_ecg_data(patient_id, is_valid, verification_details)
+        
+        return jsonify({
+            "status": "success",
+            "message": "ECG verification confirmed via REAL blockchain",
+            "blockchainResult": result,
+            "mockData": False
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
