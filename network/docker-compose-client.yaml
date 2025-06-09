@@ -23,12 +23,31 @@ services:
     image: python:3.9-slim
     environment:
       - PYTHONPATH=/app
+      - PATH=/tmp/fabric-bin:$PATH
+      - FABRIC_CFG_PATH=/app/config
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_ADDRESS=10.34.100.126:7051
+      - CORE_PEER_TLS_ROOTCERT_FILE=/app/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+      - CORE_PEER_MSPCONFIGPATH=/app/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
     volumes:
       - ../client:/app
       - ./crypto-config:/app/crypto-config:ro
       - ./channel-artifacts:/app/channel-artifacts:ro
+      - ./config:/app/config:ro
     working_dir: /app
-    command: bash -c "pip install -r requirements.txt && python app/webapp.py"
+    command: bash -c "
+      apt-get update && 
+      apt-get install -y wget curl netcat-openbsd && 
+      mkdir -p /tmp/fabric-bin &&
+      cd /tmp &&
+      wget -q https://github.com/hyperledger/fabric/releases/download/v2.5.9/hyperledger-fabric-linux-amd64-2.5.9.tar.gz &&
+      tar -xzf hyperledger-fabric-linux-amd64-2.5.9.tar.gz &&
+      cp bin/* /tmp/fabric-bin/ &&
+      chmod +x /tmp/fabric-bin/* &&
+      cd /app &&
+      pip install -r requirements.txt && 
+      python app/webapp.py"
     depends_on:
       - ipfs
     restart: unless-stopped
