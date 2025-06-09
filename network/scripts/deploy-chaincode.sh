@@ -15,10 +15,12 @@ VM5_IP="10.34.100.116"  # Peer1.Org2
 export FABRIC_CFG_PATH=${PWD}
 export CORE_PEER_TLS_ENABLED=true
 export CHANNEL_NAME=ecgchannel
-export CC_NAME=ecgcc
+export CC_NAME=ecgcontract
 export CC_SRC_PATH=../chaincode/ecg_chaincode
-export CC_VERSION=1.0
-export CC_SEQUENCE=1
+export CC_VERSION=1.4
+export CC_SEQUENCE=2
+
+ORDERER_TLS_ROOTCERT_FILE_FOR_CLIENT="${PWD}/crypto-config/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem"
 
 # Parse command line arguments
 CLEAN_START=false
@@ -258,17 +260,23 @@ test_peer_connectivity "peer1.org1" $VM3_IP 8051 || exit 1
 test_peer_connectivity "peer0.org2" $VM4_IP 9051 || exit 1
 test_peer_connectivity "peer1.org2" $VM5_IP 10051 || exit 1
 
-# Step 2: Package chaincode
+# Di awal skrip, setelah parsing argumen atau sebelum Step 2
+if [[ $FORCE_REINSTALL == true ]] || [[ APAKAH_ADA_PERUBAHAN_KODE_ATAU_VERSI == true ]]; then # Logika ini perlu Anda pikirkan implementasinya
+    log_info "Removing old chaincode package ${CC_NAME}.tar.gz to force repackaging..."
+    rm -f ./${CC_NAME}.tar.gz
+fi
+
+# Kemudian Step 2 akan membuat ulang jika file tidak ada
 log_info "=== Step 2: Packaging Chaincode ==="
-if [[ ! -f "${CC_NAME}.tar.gz" ]] || [[ $FORCE_REINSTALL == true ]]; then
-    log_info "Packaging chaincode..."
+if [[ ! -f "${CC_NAME}.tar.gz" ]]; then # Selalu package jika file tidak ada (karena baru dihapus)
+    log_info "Packaging chaincode ${CC_NAME} version ${CC_VERSION}..."
     peer lifecycle chaincode package ${CC_NAME}.tar.gz \
         --path ${CC_SRC_PATH} \
         --lang node \
-        --label ${CC_NAME}_${CC_VERSION}
+        --label ${CC_NAME}_${CC_VERSION} # Menggunakan CC_VERSION saat ini
     log_info "✓ Chaincode packaged"
 else
-    log_info "✓ Chaincode package already exists"
+    log_info "✓ Chaincode package ${CC_NAME}.tar.gz already exists and not forcing repackage."
 fi
 
 # Step 3: Check channel membership
@@ -331,25 +339,59 @@ fi
 
 # Step 8: Commit chaincode
 log_info "=== Step 8: Committing Chaincode ==="
-if peer lifecycle chaincode querycommitted --channelID ${CHANNEL_NAME} 2>/dev/null | grep -q "${CC_NAME}"; then
-    log_info "✓ Chaincode already committed"
+
+NEEDS_COMMIT=true
+# Set konteks untuk querycommitted (misalnya ke peer0.org1)
+# (Variabel lingkungan untuk Org1 Admin seharusnya sudah terset dari CheckCommitReadiness)
+
+COMMITTED_CC_INFO_JSON=$(peer lifecycle chaincode querycommitted --channelID ${CHANNEL_NAME} --name ${CC_NAME} --output json 2>/dev/null)
+
+if [[ $? -eq 0 && -n "$COMMITTED_CC_INFO_JSON" ]] && echo "$COMMITTED_CC_INFO_JSON" | jq '.sequence' &> /dev/null; then
+    COMMITTED_SEQUENCE=$(echo "$COMMITTED_CC_INFO_JSON" | jq -r '.sequence')
+    log_info "Currently committed sequence for ${CC_NAME} is ${COMMITTED_SEQUENCE}. Requested sequence is ${CC_SEQUENCE}."
+
+    if [[ "$COMMITTED_SEQUENCE" == "$CC_SEQUENCE" ]]; then
+        log_info "✓ Chaincode ${CC_NAME} with sequence ${CC_SEQUENCE} already committed."
+        NEEDS_COMMIT=false
+    elif [[ "$COMMITTED_SEQUENCE" -gt "$CC_SEQUENCE" ]]; then
+        log_error "✗ Error: A newer sequence (${COMMITTED_SEQUENCE}) of chaincode ${CC_NAME} is already committed. Current attempt is for sequence ${CC_SEQUENCE}."
+        exit 1
+    else
+        log_info "Found older committed sequence ${COMMITTED_SEQUENCE}. Proceeding to commit new sequence ${CC_SEQUENCE}."
+    fi
 else
-    log_info "Committing chaincode..."
-    peer lifecycle chaincode commit -o orderer.example.com:7050 \
+    log_info "No committed chaincode definition found for ${CC_NAME} or failed to parse. Proceeding to commit sequence ${CC_SEQUENCE}."
+fi
+
+if [[ "$NEEDS_COMMIT" == true ]]; then
+    log_info "Committing chaincode ${CC_NAME} version ${CC_VERSION} sequence ${CC_SEQUENCE}..."
+    # Pastikan konteks Admin Org1 masih aktif untuk menjalankan commit
+    export CORE_PEER_LOCALMSPID="Org1MSP"
+    export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    export CORE_PEER_MSPCONFIGPATH=${PWD}/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+    export CORE_PEER_ADDRESS=$VM2_IP:7051 # Peer yang digunakan untuk mengirim proposal commit
+
+    peer lifecycle chaincode commit -o $VM1_IP:7050 \
         --ordererTLSHostnameOverride orderer.example.com \
         --channelID ${CHANNEL_NAME} \
         --name ${CC_NAME} \
         --version ${CC_VERSION} \
         --sequence ${CC_SEQUENCE} \
         --init-required \
-	--tls \
-        --cafile ${PWD}/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem \
+        --tls \
+        --cafile "${ORDERER_TLS_ROOTCERT_FILE_FOR_CLIENT}" \
         --peerAddresses $VM2_IP:7051 \
         --tlsRootCertFiles ${PWD}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
         --peerAddresses $VM4_IP:9051 \
-        --tlsRootCertFiles ${PWD}/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
-    
-    log_info "✓ Chaincode committed"
+        --tlsRootCertFiles ${PWD}/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt 
+ 
+    if [[ $? -eq 0 ]]; then
+        log_info "✓ Chaincode committed successfully."
+        # Jika commit sukses, maka Langkah 9 (Init) mungkin perlu dijalankan (tidak dikomentari)
+    else
+        log_error "✗ Failed to commit chaincode."
+        exit 1
+    fi
 fi
 
 # Step 9: Initialize chaincode
