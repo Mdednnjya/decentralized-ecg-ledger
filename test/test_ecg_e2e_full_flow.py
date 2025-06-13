@@ -1,9 +1,9 @@
 import requests
 import json
 import time
-import uuid # Untuk menghasilkan ID unik
+import uuid 
 import datetime
-import random # Untuk data dummy yang lebih bervariasi
+import random 
 
 # --- Konfigurasi ---
 API_BASE_URL = "http://10.34.100.125:3000"
@@ -23,7 +23,7 @@ WAIT_TIME_AFTER_GRANT = 5 # Waktu tunggu setelah grant access sebelum akses
 
 # --- Dummy User Roles ---
 ADMIN_ROLE = "admin"
-PATIENT_ROLE = "patient" # Peran yang memberikan izin akses
+PATIENT_ROLE = "patient" 
 DOCTOR_ROLE = "doctor"
 TARGET_DOCTOR_ID = "DR-TEST-001" 
 
@@ -32,9 +32,7 @@ def generate_dummy_ecg_payload(group_number="5"):
     """
     Menghasilkan payload data EKG dummy sesuai format yang diberikan.
     """
-    # Menggunakan datetime untuk timestamp, sesuaikan format jika diperlukan
     current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds') + 'Z'
-    # Menggunakan UUID untuk memastikan patientId unik setiap kali dijalankan
     unique_patient_id = f"GROUP{group_number}-PATIENT{uuid.uuid4().hex[:5].upper()}"
 
     num_points = 100 
@@ -100,11 +98,13 @@ def test_ecg_upload_grant_and_access():
         print(f"Status Kode Respons Unggah: {response_upload.status_code}")
         print(f"Respons Unggah JSON: {json.dumps(upload_response_data, indent=2)}")
 
-        if response_upload.status_code in [200, 201, 202] and "success" in upload_response_data.get("message", "").lower():
+        if response_upload.status_code in [200, 201, 202] and upload_response_data.get("status") == "success":
             print(f">>> Unggah Data Berhasil untuk Patient ID: {patient_id_to_test} <<<")
             upload_success = True
         else:
             print("!!! Unggah Data GAGAL. Periksa respons dan log server. !!!")
+            print(f"Detail Kegagalan: Status API '{upload_response_data.get('status')}', Pesan: '{upload_response_data.get('message')}'")
+
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR: Gagal mengunggah data EKG ke {UPLOAD_ECG_ENDPOINT}.")
@@ -121,13 +121,8 @@ def test_ecg_upload_grant_and_access():
     # 3. Tunggu untuk Verifikasi Internal Data
     print(f"\n[STEP 2/4] Mengunggu {WAIT_TIME_AFTER_UPLOAD_FOR_CONFIRMATION} detik untuk verifikasi internal data (PENDING_VERIFICATION -> CONFIRMED)...")
     time.sleep(WAIT_TIME_AFTER_UPLOAD_FOR_CONFIRMATION)
-    
-    # Opsional: Bisa ditambahkan loop di sini untuk query status verifikasi data secara berkala
-    # Namun, karena tidak ada endpoint 'verifikasi langsung', kita hanya bisa menunggu.
 
     # 4. Berikan Izin Akses ke Dokter (POST Request)
-    # Payload izin akses berdasarkan contoh Anda: {"patientId": "..."}
-    # Dan role user yang memberikan izin adalah "patient"
     grant_payload = {
         "patientId": patient_id_to_test
         # Asumsi: authorizedUserId adalah default, atau ditangani di backend
@@ -183,25 +178,26 @@ def test_ecg_upload_grant_and_access():
         print(f"Respons Akses JSON: {json.dumps(access_response_data, indent=2)}")
 
         # 6. Verifikasi Data yang Diakses
-        retrieved_ecg_data = access_response_data.get("ecgData", {})
-        original_ecg_data = dummy_payload["ecgData"]
+        retrieved_main_data = access_response_data.get("data", {}) 
+        retrieved_patient_id_from_data = retrieved_main_data.get("patientID") 
 
-        if (access_response_data.get("patientId") == patient_id_to_test and
-            retrieved_ecg_data.get("patientInfo", {}).get("id") == original_ecg_data["patientInfo"]["id"] and
-            retrieved_ecg_data.get("patientInfo", {}).get("age") == original_ecg_data["patientInfo"]["age"] and
-            retrieved_ecg_data.get("recordInfo", {}).get("deviceId") == original_ecg_data["recordInfo"]["deviceId"]):
-            print("\n>>> Verifikasi Data Berhasil: Data yang diakses cocok dengan yang diunggah! <<<")
+        if (access_response_data.get("patientId") == patient_id_to_test and  # patientId di level root
+            retrieved_patient_id_from_data == patient_id_to_test and # patientID di dalam "data"
+            retrieved_main_data.get("patientID") == patient_id_to_test and # patientID di dalam "data"
+            retrieved_main_data.get("status") == "CONFIRMED" # Pastikan status data CONFIRMED
+        ):
+            print("\n>>> Verifikasi Data Berhasil: Data yang diakses cocok dengan yang diunggah dan diverifikasi! <<<")
             access_success = True
         else:
             print("\n!!! Verifikasi Data GAGAL: Data yang diakses TIDAK cocok atau tidak ditemukan. !!!")
             print("Data yang diharapkan (potongan):")
-            print(f"  Patient ID: {dummy_payload.get('patientId')}")
-            print(f"  Patient Info ID: {dummy_payload.get('ecgData', {}).get('patientInfo', {}).get('id')}")
-            print(f"  Patient Info Age: {dummy_payload.get('ecgData', {}).get('patientInfo', {}).get('age')}")
+            print(f"  Patient ID (root): {patient_id_to_test}")
+            print(f"  Patient ID (in data object): {patient_id_to_test}")
+            print(f"  Status: CONFIRMED")
             print("Data yang diterima (potongan):")
-            print(f"  Patient ID: {access_response_data.get('patientId')}")
-            print(f"  Patient Info ID: {retrieved_ecg_data.get('patientInfo', {}).get('id')}")
-            print(f"  Patient Info Age: {retrieved_ecg_data.get('patientInfo', {}).get('age')}")
+            print(f"  Patient ID (root): {access_response_data.get('patientId')}")
+            print(f"  Patient ID (in data object): {retrieved_main_data.get('patientID')}")
+            print(f"  Status: {retrieved_main_data.get('status')}")
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR: Gagal mengakses data dari {access_url}.")

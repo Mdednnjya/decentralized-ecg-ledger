@@ -1,0 +1,88 @@
+Memulai program pengujian end-to-end (unggah, tunggu verifikasi internal, beri izin, akses data EKG)...
+--- Memulai Pengujian End-to-End Unggah, Tunggu Verifikasi, Beri Izin, & Akses Data EKG ---
+Menggunakan Patient ID untuk Pengujian: GROUP5-PATIENT1766E
+
+[STEP 1/4] Mengunggah data EKG sebagai admin ke: http://10.34.100.125:3000/ecg/upload
+Status Kode Respons Unggah: 200
+Respons Unggah JSON: {
+  "blockchainResult": {
+    "actualIdentityUsed": "Admin@org1.example.com",
+    "blockchainStored": true,
+    "ipfsHash": "QmWpJz1HEpaeDBBnurVZudL5NhFGK4v9APwnA3cqoeAk4K",
+    "message": "ECG data stored successfully",
+    "mspId": "Org1MSP",
+    "patientID": "GROUP5-PATIENT1766E",
+    "returnCode": 0,
+    "status": "success",
+    "userRole": "admin",
+    "verificationStatus": "PENDING_VERIFICATION"
+  },
+  "ipfsHash": "QmWpJz1HEpaeDBBnurVZudL5NhFGK4v9APwnA3cqoeAk4K",
+  "message": "ECG uploaded by admin",
+  "patientId": "GROUP5-PATIENT1766E",
+  "status": "success",
+  "userRole": "admin",
+  "verificationStatus": "PENDING_VERIFICATION"
+}
+>>> Unggah Data Berhasil untuk Patient ID: GROUP5-PATIENT1766E <<<
+
+[STEP 2/4] Mengunggu 15 detik untuk verifikasi internal data (PENDING_VERIFICATION -> CONFIRMED)...
+
+[STEP 3/4] Memberikan izin akses sebagai patient untuk Patient ID: GROUP5-PATIENT1766E
+Payload Izin: {
+  "patientId": "GROUP5-PATIENT1766E"
+}
+Status Kode Respons Izin: 200
+Respons Izin JSON: {
+  "grantedTo": "x509::/C=US/ST=California/L=San Francisco/OU=client/CN=User1@org2.example.com::/C=US/ST=California/L=San Francisco/O=org2.example.com/CN=ca.org2.example.com",
+  "message": "Access granted by patient",
+  "patientId": "GROUP5-PATIENT1766E",
+  "result": {
+    "actualIdentityUsed": "User1@org1.example.com",
+    "grantedTo": "x509::/C=US/ST=California/L=San Francisco/OU=client/CN=User1@org2.example.com::/C=US/ST=California/L=San Francisco/O=org2.example.com/CN=ca.org2.example.com",
+    "message": "Access granted by patient",
+    "mspId": "Org1MSP",
+    "patientID": "GROUP5-PATIENT1766E",
+    "status": "success",
+    "userRole": "patient"
+  },
+  "status": "success",
+  "userRole": "patient"
+}
+>>> Pemberian Izin Akses Berhasil untuk Patient ID: GROUP5-PATIENT1766E <<<
+
+Mengunggu 5 detik setelah pemberian izin...
+
+[STEP 4/4] Mengakses data EKG sebagai doctor dari: http://10.34.100.125:3000/ecg/access/GROUP5-PATIENT1766E
+Status Kode Respons Akses: 200
+Respons Akses JSON: {
+  "accessRecorded": true,
+  "data": {
+    "accessTime": "2025-06-13T14:17:19.785Z",
+    "accessorType": "AUTHORIZED_ACCESS",
+    "ipfsHash": "QmWpJz1HEpaeDBBnurVZudL5NhFGK4v9APwnA3cqoeAk4K",
+    "metadata": {
+      "department": "Jantung",
+      "doctor": "Dr. Citra",
+      "hospital": "Rumah Sakit UMM"
+    },
+    "patientID": "GROUP5-PATIENT1766E",
+    "status": "CONFIRMED",
+    "timestamp": "2025-06-13T14:16:57.611187",
+    "verificationDetails": {
+      "details": "IPFS verified - Hash: QmWpJz1HEpaeDBBnurVZ...",
+      "isValid": true,
+      "verifiedAt": "2025-06-13T14:17:08.954Z",
+      "verifiedBy": "x509::/C=US/ST=California/L=San Francisco/OU=admin/CN=Admin@org1.example.com::/C=US/ST=California/L=San Francisco/O=org1.example.com/CN=ca.org1.example.com"
+    }
+  },
+  "message": "ECG data accessed by doctor",
+  "patientId": "GROUP5-PATIENT1766E",
+  "status": "success",
+  "userRole": "doctor"
+}
+
+>>> Verifikasi Data Berhasil: Data yang diakses cocok dengan yang diunggah dan diverifikasi! <<<
+--- Pengujian End-to-End Unggah, Tunggu Verifikasi, Beri Izin, & Akses Selesai ---
+
+Program pengujian selesai.
