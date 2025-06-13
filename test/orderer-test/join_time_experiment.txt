@@ -1,0 +1,31 @@
+--- Skenario 1 (0 Peer Lain Aktif) - Join peer0.org1 ---
+2025-06-13 16:51:25.511 UTC 0001 INFO [channelCmd] InitCmdFactory -> Endorser and orderer connections initialized
+2025-06-13 16:51:25.606 UTC 0002 INFO [channelCmd] executeJoin -> Successfully submitted proposal to join channel
+
+real	0m0.160s
+user	0m0.063s
+sys	0m0.025s
+
+--- Skenario 2 (1 Peer Lain Aktif) - Join peer0.org2 ---
+2025-06-13 16:51:27.676 UTC 0001 INFO [channelCmd] InitCmdFactory -> Endorser and orderer connections initialized
+2025-06-13 16:51:27.770 UTC 0002 INFO [channelCmd] executeJoin -> Successfully submitted proposal to join channel
+
+real	0m0.161s
+user	0m0.070s
+sys	0m0.017s
+
+--- Skenario 3 (2 Peer Lain Aktif) - Join peer1.org1 ---
+2025-06-13 16:51:29.835 UTC 0001 INFO [channelCmd] InitCmdFactory -> Endorser and orderer connections initialized
+2025-06-13 16:51:29.927 UTC 0002 INFO [channelCmd] executeJoin -> Successfully submitted proposal to join channel
+
+real	0m0.155s
+user	0m0.068s
+sys	0m0.010s
+
+--- Skenario 4 (3 Peer Lain Aktif) - Join peer1.org2 ---
+2025-06-13 16:51:31.992 UTC 0001 INFO [channelCmd] InitCmdFactory -> Endorser and orderer connections initialized
+2025-06-13 16:51:32.115 UTC 0002 INFO [channelCmd] executeJoin -> Successfully submitted proposal to join channel
+
+real	0m0.186s
+user	0m0.064s
+sys	0m0.013s

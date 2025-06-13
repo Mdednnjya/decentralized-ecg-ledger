@@ -1,0 +1,22 @@
+=== HASIL EKSPERIMEN: WAKTU PROPAGASI BLOK ===
+Waktu Propagasi Blok: 164.000 ms
+--- Pengukuran selesai ---
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 317.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 37.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 41.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 146.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 6.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 7.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 6.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 6.000 ms
+--- Pengukuran selesai ---
+Waktu Propagasi Blok: 6.000 ms
+--- Pengukuran selesai ---
