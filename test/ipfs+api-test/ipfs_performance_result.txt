@@ -1,0 +1,39 @@
+[10:33:59] Mulai Uji Performa IPFS
+[10:33:59] Container: ipfs.example.com
+[10:33:59] Hasil akan disimpan di: ipfs_performance_results.txt
+=========================================
+[10:33:59]
+[10:33:59] === Menguji: 10 KB (kecil) (10 KB) ===
+[10:33:59] 1) Membuat dummy di host
+[10:33:59] 2) Copy ke container
+[10:33:59] 3) Upload (ipfs add)
+[10:33:59]    → Upload Hash: QmTeyq9b4APgWKHrybC2sWmPbvV7WWZn3bCibdLHNG5Wef
+[10:33:59]    → Waktu Upload: 0.05s
+[10:33:59] 4) Download (ipfs cat)
+[10:33:59]    → Waktu Download: 0.05s
+[10:33:59] 5) Cleanup
+[10:33:59] === Selesai: 10 KB (kecil) ===
+[10:33:59]
+[10:33:59] === Menguji: 1 MB (sedang) (1024 KB) ===
+[10:33:59] 1) Membuat dummy di host
+[10:33:59] 2) Copy ke container
+[10:34:00] 3) Upload (ipfs add)
+[10:34:00]    → Upload Hash: QmWk1gLtaKyh2EFkTQK7oTUV89JXnnayPWsDBL1J6DP74s
+[10:34:00]    → Waktu Upload: 0.07s
+[10:34:00] 4) Download (ipfs cat)
+[10:34:00]    → Waktu Download: 0.05s
+[10:34:00] 5) Cleanup
+[10:34:00] === Selesai: 1 MB (sedang) ===
+[10:34:00]
+[10:34:00] === Menguji: 5 MB (besar) (5120 KB) ===
+[10:34:00] 1) Membuat dummy di host
+[10:34:00] 2) Copy ke container
+[10:34:00] 3) Upload (ipfs add)
+[10:34:00]    → Upload Hash: QmcZZsCjq9eNbqVLMbMXqLshdrzD6DsXDReQ3GTH1jktY4
+[10:34:00]    → Waktu Upload: 0.33s
+[10:34:00] 4) Download (ipfs cat)
+[10:34:00]    → Waktu Download: 0.08s
+[10:34:00] 5) Cleanup
+[10:34:01] === Selesai: 5 MB (besar) ===
+[10:34:01]
+[10:34:01] === UJI PERFORMA IPFS SELESAI ===
