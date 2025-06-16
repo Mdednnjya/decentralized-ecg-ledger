@@ -1,0 +1,5 @@
+Peer,AvgTime_ms,MinTime_ms,MaxTime_ms
+peer0.org1.example.com,59.833333333333336,2,1213
+peer0.org2.example.com,62.45,2,1182
+peer1.org1.example.com,13.016666666666667,2,272
+peer1.org2.example.com,13.316666666666666,2,273
