@@ -39,3 +39,9 @@ Thumbs.db
 # IPFS
 .ipfs/
 .env
+
+# Build Artifact
+bin/
+network/*.tar.gz  
+network/*.block   
+network/*.tx      
